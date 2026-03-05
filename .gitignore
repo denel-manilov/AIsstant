@@ -1,0 +1,7 @@
+.virtualenv
+.venv
+__pycache__
+.env
+bin/
+/settings.json
+.DS_Store
