@@ -78,8 +78,17 @@ class UserMessageBlock(QFrame):
         self._update_height()
 
     def _update_height(self) -> None:
-        hint_height = self._label.sizeHint().height()
-        self._label.setFixedHeight(hint_height)
+        width = self._label.width()
+        if width > 0:
+            height = self._label.heightForWidth(width)
+            if height > 0:
+                self._label.setFixedHeight(height)
+                return
+        self._label.setFixedHeight(self._label.sizeHint().height())
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._update_height()
 
 
 class ResponseBlock(QFrame):
@@ -89,26 +98,26 @@ class ResponseBlock(QFrame):
 
     _EXPAND_BTN_STYLE_DEFAULT = (
         "QPushButton { color: #888; background: rgba(40, 40, 70, 200);"
-        " border: 1px solid rgba(86, 141, 229, 0.3); border-radius: 11px;"
-        " font-size: 12px; font-weight: bold; }"
+        " border: 1px solid rgba(86, 141, 229, 0.3); border-radius: 9px;"
+        " font-size: 10px; font-weight: bold; }"
         "QPushButton:hover { color: #568de5; border-color: #568de5; }"
     )
     _EXPAND_BTN_STYLE_LOADING = (
         "QPushButton { color: #f0c040; background: rgba(40, 40, 70, 200);"
-        " border: 1px solid rgba(240, 192, 64, 0.5); border-radius: 11px;"
-        " font-size: 12px; font-weight: bold; }"
+        " border: 1px solid rgba(240, 192, 64, 0.5); border-radius: 9px;"
+        " font-size: 10px; font-weight: bold; }"
         "QPushButton:hover { color: #f5d060; border-color: #f5d060; }"
     )
     _EXPAND_BTN_STYLE_READY = (
         "QPushButton { color: #568de5; background: rgba(40, 40, 70, 200);"
-        " border: 1px solid rgba(86, 141, 229, 0.6); border-radius: 11px;"
-        " font-size: 12px; font-weight: bold; }"
+        " border: 1px solid rgba(86, 141, 229, 0.6); border-radius: 9px;"
+        " font-size: 10px; font-weight: bold; }"
         "QPushButton:hover { color: #7ab0ff; border-color: #7ab0ff; }"
     )
     _EXPAND_BTN_STYLE_ERROR = (
         "QPushButton { color: #e74c3c; background: rgba(40, 40, 70, 200);"
-        " border: 1px solid rgba(231, 76, 60, 0.5); border-radius: 11px;"
-        " font-size: 12px; font-weight: bold; }"
+        " border: 1px solid rgba(231, 76, 60, 0.5); border-radius: 9px;"
+        " font-size: 10px; font-weight: bold; }"
         "QPushButton:hover { color: #ff6b5a; border-color: #ff6b5a; }"
     )
 
@@ -144,7 +153,7 @@ class ResponseBlock(QFrame):
 
         self._expand_btn = QPushButton("?")
         self._expand_btn.setParent(self)
-        self._expand_btn.setFixedSize(22, 22)
+        self._expand_btn.setFixedSize(18, 18)
         self._expand_btn.setStyleSheet(self._EXPAND_BTN_STYLE_DEFAULT)
         self._expand_btn.clicked.connect(
             lambda: self.expansion_requested.emit(self._block_id),
@@ -190,7 +199,7 @@ class ResponseBlock(QFrame):
         self._browser.setFixedHeight(doc_height)
 
     def _reposition_expand_btn(self) -> None:
-        self._expand_btn.move(self.width() - 30, 6)
+        self._expand_btn.move(self.width() - 22, self.height() - 22)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
