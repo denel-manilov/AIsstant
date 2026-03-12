@@ -48,6 +48,9 @@ class AgentPipeline:
         instructions: str = DEFAULT_INSTRUCTIONS,
         initial_history: list[dict] | None = None,
         model: str = "gpt-4.1-nano",
+        vad_type: str = "server_vad",
+        vad_threshold: float = 0.5,
+        silence_duration_ms: int = 400,
     ) -> None:
         self._audio_queue = audio_queue
         self._on_text_delta = on_text_delta
@@ -71,9 +74,9 @@ class AgentPipeline:
             config=VoicePipelineConfig(
                 stt_settings=STTModelSettings(
                     turn_detection={
-                        "type": "server_vad",
-                        "threshold": 0.5,
-                        "silence_duration_ms": 400,
+                        "type": vad_type,
+                        "threshold": vad_threshold,
+                        "silence_duration_ms": silence_duration_ms,
                     },
                 ),
                 tracing_disabled=True,
@@ -91,6 +94,10 @@ class AgentPipeline:
             if item.get("role") in ("user", "assistant")
             and isinstance(item.get("content"), str)
         ]
+
+    def clear_context(self) -> None:
+        """Reset the conversation context."""
+        self._workflow.clear_context()
 
     async def start(self) -> None:
         self._on_status("Connecting...")
@@ -202,13 +209,17 @@ class _TextCapturingWorkflow(SingleAgentVoiceWorkflow):
         on_transcription: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(agent)
-        if initial_history:
-            self._input_history = list(initial_history)
+        self._initial_history = list(initial_history) if initial_history else []
+        self._input_history = list(self._initial_history)
         self._on_text_delta = on_text_delta
         self._on_response_start = on_response_start
         self._on_transcription = on_transcription
         self._tracker = tracker
         self._skip_event = asyncio.Event()
+
+    def clear_context(self) -> None:
+        log.info("Clearing context")
+        self._input_history = list(self._initial_history)
 
     def request_skip(self) -> None:
         log.info("Skip requested")

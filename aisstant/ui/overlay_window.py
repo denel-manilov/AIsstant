@@ -38,6 +38,50 @@ class _Edge(IntFlag):
     BOTTOM = 8
 
 
+class UserMessageBlock(QFrame):
+    """A user question/message block."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full_text = ""
+        self.setStyleSheet(
+            "UserMessageBlock {"
+            "  background-color: rgba(30, 30, 60, 180);"
+            "  border: 1px solid rgba(100, 100, 150, 0.3);"
+            "  border-radius: 8px;"
+            "}"
+        )
+        self._label = QLabel()
+        self._label.setWordWrap(True)
+        self._label.setFont(QFont(MONOSPACE_FONT, 12, weight=QFont.Weight.Normal))
+        self._label.setStyleSheet(
+            "QLabel {"
+            "  color: #b0b0ff; background: transparent; border: none;"
+            "  padding: 4px;"
+            "}"
+        )
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.addWidget(self._label)
+
+    @property
+    def full_text(self) -> str:
+        return self._full_text
+
+    def set_text(self, text: str) -> None:
+        self._full_text = text
+        self._label.setText(text)
+        self._update_height()
+
+    def _update_height(self) -> None:
+        hint_height = self._label.sizeHint().height()
+        self._label.setFixedHeight(hint_height)
+
+
 class ResponseBlock(QFrame):
     """A single AI response block."""
 
@@ -154,6 +198,7 @@ class ResponseBlock(QFrame):
 
 
 class OverlayWindow(QWidget):
+    clear_requested = pyqtSignal()
     close_requested = pyqtSignal()
     commit_requested = pyqtSignal()
     device_changed = pyqtSignal(int)
@@ -316,6 +361,18 @@ class OverlayWindow(QWidget):
         )
         self._toggle_btn.clicked.connect(self.toggle_requested.emit)
 
+        self._clear_btn = QPushButton("Clear")
+        self._clear_btn.setFixedWidth(60)
+        self._clear_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: rgba(149, 165, 166, 0.8); color: white;"
+            "  border: none; border-radius: 6px; padding: 6px;"
+            "  font-weight: bold;"
+            "}"
+            "QPushButton:hover { background: rgba(149, 165, 166, 1.0); }"
+        )
+        self._clear_btn.clicked.connect(self.clear_requested.emit)
+
         self._send_btn = QPushButton("Send")
         self._send_btn.setFixedWidth(60)
         self._send_btn.setVisible(False)
@@ -344,6 +401,7 @@ class OverlayWindow(QWidget):
 
         controls.addWidget(self._device_combo)
         controls.addStretch()
+        controls.addWidget(self._clear_btn)
         controls.addWidget(self._send_btn)
         controls.addWidget(self._skip_btn)
         controls.addWidget(self._toggle_btn)
@@ -351,12 +409,28 @@ class OverlayWindow(QWidget):
 
     # ── public API ───────────────────────────────────────
 
+    def clear_dialogue(self) -> None:
+        """Clear all messages from the overlay."""
+        while self._blocks_layout.count() > 1:
+            item = self._blocks_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._current_block = None
+        self._blocks.clear()
+
     def set_devices(self, devices: list[tuple[int, str]]) -> None:
         self._device_combo.blockSignals(True)
         self._device_combo.clear()
         for index, name in devices:
             self._device_combo.addItem(name, index)
         self._device_combo.blockSignals(False)
+
+    def show_user_message(self, text: str) -> None:
+        """Display a user question/message block."""
+        block = UserMessageBlock()
+        block.set_text(text)
+        insert_index = self._blocks_layout.count() - 1
+        self._blocks_layout.insertWidget(insert_index, block)
 
     def begin_response(self) -> None:
         block = ResponseBlock()
