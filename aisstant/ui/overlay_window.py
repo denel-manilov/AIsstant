@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -214,6 +215,7 @@ class OverlayWindow(QWidget):
     expansion_requested = pyqtSignal(str)
     settings_requested = pyqtSignal()
     skip_requested = pyqtSignal()
+    text_submitted = pyqtSignal(str)
     toggle_requested = pyqtSignal()
 
     def __init__(self) -> None:
@@ -259,6 +261,7 @@ class OverlayWindow(QWidget):
 
         layout.addLayout(self._build_header())
         layout.addWidget(self._build_scroll_area())
+        layout.addWidget(self._build_text_input())
         layout.addLayout(self._build_controls())
 
     def _build_header(self) -> QHBoxLayout:
@@ -330,6 +333,33 @@ class OverlayWindow(QWidget):
         vsb.rangeChanged.connect(self._on_scroll_range_changed)
 
         return self._scroll_area
+
+    def _build_text_input(self) -> QLineEdit:
+        self._text_input = QLineEdit()
+        self._text_input.setPlaceholderText("Type a question...")
+        self._text_input.setEnabled(False)
+        self._text_input.setStyleSheet(
+            "QLineEdit {"
+            "  background: rgba(40, 40, 70, 200); color: #e6e6e6;"
+            "  border: 1px solid rgba(86, 141, 229, 0.3);"
+            "  border-radius: 6px; padding: 6px 10px;"
+            "  font-size: 12px;"
+            "}"
+            "QLineEdit:focus {"
+            "  border: 1px solid rgba(86, 141, 229, 0.7);"
+            "}"
+            "QLineEdit:disabled {"
+            "  color: #666; background: rgba(30, 30, 50, 200);"
+            "}"
+        )
+        self._text_input.returnPressed.connect(self._on_text_submit)
+        return self._text_input
+
+    def _on_text_submit(self) -> None:
+        text = self._text_input.text().strip()
+        if text:
+            self._text_input.clear()
+            self.text_submitted.emit(text)
 
     def _build_controls(self) -> QHBoxLayout:
         controls = QHBoxLayout()
@@ -495,9 +525,11 @@ class OverlayWindow(QWidget):
         self._skip_btn.setVisible(active)
         if active:
             self._send_btn.setVisible(False)
+            self._text_input.setEnabled(False)
         else:
             if self._toggle_btn.text() == "Stop":
                 self._send_btn.setVisible(True)
+                self._text_input.setEnabled(True)
             QTimer.singleShot(0, self._render_current_block)
 
     def _render_current_block(self) -> None:
@@ -507,6 +539,7 @@ class OverlayWindow(QWidget):
 
     def set_recording(self, active: bool) -> None:
         self._send_btn.setVisible(active)
+        self._text_input.setEnabled(active)
         self._toggle_btn.setText("Stop" if active else "Start")
         btn_color = "rgba(231, 76, 60, 0.8)" if active else "rgba(86, 141, 229, 0.8)"
         hover_color = "rgba(231, 76, 60, 1.0)" if active else "rgba(86, 141, 229, 1.0)"

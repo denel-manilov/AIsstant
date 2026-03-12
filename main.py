@@ -63,6 +63,7 @@ class App:
         self._window.device_changed.connect(self._on_device_changed)
         self._window.settings_requested.connect(self._on_settings)
         self._window.skip_requested.connect(self._on_skip)
+        self._window.text_submitted.connect(self._on_text_submitted)
         self._window.close_requested.connect(self._on_close)
         self._window.expansion_requested.connect(self._on_expansion_requested)
         self._settings_window.saved.connect(self._on_settings_saved)
@@ -150,6 +151,10 @@ class App:
         self._window.clear_dialogue()
         if self._pipeline is not None:
             self._pipeline.clear_context()
+
+    def _on_text_submitted(self, text: str) -> None:
+        if self._recording and self._pipeline is not None:
+            self._loop.create_task(self._pipeline.send_text(text))
 
     def _on_commit(self) -> None:
         if self._recording and self._pipeline is not None:

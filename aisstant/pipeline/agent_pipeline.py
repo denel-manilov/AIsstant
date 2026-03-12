@@ -144,6 +144,19 @@ class AgentPipeline:
         self._on_status("Disconnected")
         log.info("Pipeline stopped")
 
+    async def send_text(self, text: str) -> None:
+        """Send a text message directly, bypassing STT."""
+        self._on_status("Thinking...")
+        try:
+            async for _chunk in self._workflow.run(text):
+                pass
+        except Exception as exc:
+            log.error("Text send error: %s", exc, exc_info=True)
+            self._on_status(f"Error: {exc}")
+            return
+        self._on_turn_ended()
+        self._on_status("Listening...")
+
     async def commit(self) -> None:
         if self._audio_input is None:
             return
