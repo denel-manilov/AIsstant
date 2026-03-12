@@ -53,6 +53,7 @@ class App:
         self._using_system_audio = False
         self._pipeline: AgentPipeline | None = None
         self._pending_transcription: str | None = None
+        self._pending_image_data: bytes | None = None
 
         self._apply_expansion_settings()
 
@@ -105,12 +106,15 @@ class App:
             self._window.mark_current_block_complete()
             history = self._pipeline.get_history() if self._pipeline else []
             self._expansion_service.request_expansion(
-                block_id, transcription, history=history,
+                block_id, transcription,
+                history=history,
+                image_data=self._pending_image_data,
             )
             self._expansion_service.add_listener(
                 block_id, self._make_expansion_listener(block_id),
             )
             self._pending_transcription = None
+            self._pending_image_data = None
 
     def _on_turn_ended(self) -> None:
         self._window.set_responding(False)
@@ -152,9 +156,14 @@ class App:
         if self._pipeline is not None:
             self._pipeline.clear_context()
 
-    def _on_text_submitted(self, text: str) -> None:
-        if self._recording and self._pipeline is not None:
-            self._loop.create_task(self._pipeline.send_text(text))
+    def _on_text_submitted(self, text: str, image_data: object) -> None:
+        if not self._recording or self._pipeline is None:
+            return
+        display_text = text if text else "[Image]"
+        self._window.show_user_message(display_text, image_data)
+        self._pending_transcription = display_text
+        self._pending_image_data = image_data
+        self._loop.create_task(self._pipeline.send_text(text, image_data))
 
     def _on_commit(self) -> None:
         if self._recording and self._pipeline is not None:
