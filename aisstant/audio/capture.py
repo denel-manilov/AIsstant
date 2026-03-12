@@ -73,7 +73,7 @@ class AudioCapture:
         status: sd.CallbackFlags,
     ) -> None:
         if status:
-            print(f"[audio] status: {status}")
+            logger.info("[audio] status: %s", status)
         chunk = indata.copy().flatten()
         self._tracker.on_audio_chunk_captured()
         self._loop.call_soon_threadsafe(self._enqueue, chunk)
