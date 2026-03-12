@@ -21,6 +21,7 @@ from aisstant.config import (
     load_expansion_settings,
     load_few_shot_examples,
     load_silence_duration_ms,
+    load_vad_eagerness,
     load_vad_threshold,
     load_vad_type,
 )
@@ -211,6 +212,7 @@ class App:
             vad_type=load_vad_type(),
             vad_threshold=load_vad_threshold(),
             silence_duration_ms=load_silence_duration_ms(),
+            vad_eagerness=load_vad_eagerness(),
         )
 
         if self._using_system_audio:

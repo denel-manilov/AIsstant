@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 
 from aisstant.config import (
     AVAILABLE_AGENT_MODELS,
+    AVAILABLE_VAD_EAGERNESS,
     AVAILABLE_VAD_TYPES,
     load_agent_model,
     load_api_key,
@@ -25,6 +26,7 @@ from aisstant.config import (
     load_expansion_settings,
     load_few_shot_examples,
     load_silence_duration_ms,
+    load_vad_eagerness,
     load_vad_threshold,
     load_vad_type,
     save_agent_model,
@@ -33,6 +35,7 @@ from aisstant.config import (
     save_expansion_settings,
     save_few_shot_examples,
     save_silence_duration_ms,
+    save_vad_eagerness,
     save_vad_threshold,
     save_vad_type,
 )
@@ -157,6 +160,10 @@ class SettingsWindow(StealthWindow):
         layout.addLayout(self._build_vad_type_row())
         layout.addLayout(self._build_vad_threshold_row())
         layout.addLayout(self._build_silence_duration_row())
+        layout.addLayout(self._build_vad_eagerness_row())
+
+        self._vad_type.currentTextChanged.connect(self._on_vad_type_changed)
+        self._on_vad_type_changed(self._vad_type.currentText())
 
         prompt_label = QLabel("System Prompt:")
         prompt_label.setStyleSheet(_SECTION_LABEL_STYLE)
@@ -364,6 +371,50 @@ class SettingsWindow(StealthWindow):
         row.addWidget(self._silence_label)
         row.addStretch()
         return row
+
+    def _build_vad_eagerness_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+
+        self._eagerness_label = QLabel("VAD Eagerness:")
+        self._eagerness_label.setStyleSheet(_SECTION_LABEL_STYLE)
+
+        self._eagerness_combo = QComboBox()
+        self._eagerness_combo.addItems(AVAILABLE_VAD_EAGERNESS)
+        self._eagerness_combo.setStyleSheet(
+            "QComboBox {"
+            "  background-color: rgba(15, 15, 30, 180);"
+            "  color: #e6e6e6;"
+            "  border: 1px solid rgba(86, 141, 229, 0.3);"
+            "  border-radius: 6px;"
+            "  padding: 4px 8px;"
+            "}"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox QAbstractItemView {"
+            "  background-color: rgba(26, 26, 46, 240);"
+            "  color: #e6e6e6;"
+            "  selection-background-color: rgba(86, 141, 229, 0.5);"
+            "}"
+        )
+        self._eagerness_combo.setMinimumWidth(160)
+
+        row.addWidget(self._eagerness_label)
+        row.addWidget(self._eagerness_combo)
+        row.addStretch()
+        return row
+
+    def _on_vad_type_changed(self, vad_type: str) -> None:
+        is_server = vad_type == "server_vad"
+        self._vad_slider.setVisible(is_server)
+        self._vad_label.setVisible(is_server)
+        self._silence_slider.setVisible(is_server)
+        self._silence_label.setVisible(is_server)
+        self._eagerness_label.setVisible(not is_server)
+        self._eagerness_combo.setVisible(not is_server)
+        # Find and toggle the row labels too
+        for label in self.findChildren(QLabel):
+            text = label.text()
+            if text == "VAD Threshold:" or text == "Silence Duration (ms):":
+                label.setVisible(is_server)
 
     def _build_model_selector(self) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -579,6 +630,7 @@ class SettingsWindow(StealthWindow):
         save_vad_type(self._vad_type.currentText())
         save_vad_threshold(self._vad_slider.value() / 100.0)
         save_silence_duration_ms(self._silence_slider.value())
+        save_vad_eagerness(self._eagerness_combo.currentText())
         save_custom_prompt(self._editor.toPlainText())
         save_few_shot_examples(self._collect_examples())
         save_expansion_settings(
@@ -605,6 +657,9 @@ class SettingsWindow(StealthWindow):
         silence_ms = load_silence_duration_ms()
         self._silence_slider.setValue(silence_ms)
         self._silence_label.setText(str(silence_ms))
+
+        self._eagerness_combo.setCurrentText(load_vad_eagerness())
+        self._on_vad_type_changed(self._vad_type.currentText())
 
         self._editor.setPlainText(load_custom_prompt())
 

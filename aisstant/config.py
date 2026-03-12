@@ -43,6 +43,8 @@ DEFAULT_VAD_TYPE = "server_vad"
 AVAILABLE_VAD_TYPES = ["server_vad", "semantic_vad"]
 DEFAULT_VAD_THRESHOLD = 0.5
 DEFAULT_SILENCE_DURATION_MS = 400
+DEFAULT_VAD_EAGERNESS = "auto"
+AVAILABLE_VAD_EAGERNESS = ["auto", "low", "medium", "high"]
 
 
 def load_agent_model() -> str:
@@ -160,6 +162,16 @@ def load_silence_duration_ms() -> int:
 def save_silence_duration_ms(ms: int) -> None:
     settings = _load_settings()
     settings["silence_duration_ms"] = ms
+    _save_settings(settings)
+
+
+def load_vad_eagerness() -> str:
+    return _load_settings().get("vad_eagerness", DEFAULT_VAD_EAGERNESS)
+
+
+def save_vad_eagerness(eagerness: str) -> None:
+    settings = _load_settings()
+    settings["vad_eagerness"] = eagerness
     _save_settings(settings)
 
 

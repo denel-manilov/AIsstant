@@ -51,6 +51,7 @@ class AgentPipeline:
         vad_type: str = "server_vad",
         vad_threshold: float = 0.5,
         silence_duration_ms: int = 400,
+        vad_eagerness: str = "auto",
     ) -> None:
         self._audio_queue = audio_queue
         self._on_text_delta = on_text_delta
@@ -68,16 +69,25 @@ class AgentPipeline:
             initial_history,
             on_transcription=on_transcription,
         )
+
+        if vad_type == "semantic_vad":
+            turn_detection = {
+                "type": "semantic_vad",
+                "eagerness": vad_eagerness,
+            }
+        else:
+            turn_detection = {
+                "type": "server_vad",
+                "threshold": vad_threshold,
+                "silence_duration_ms": silence_duration_ms,
+            }
+
         self._pipeline = VoicePipeline(
             workflow=self._workflow,
             tts_model=_NoOpTTS(),
             config=VoicePipelineConfig(
                 stt_settings=STTModelSettings(
-                    turn_detection={
-                        "type": vad_type,
-                        "threshold": vad_threshold,
-                        "silence_duration_ms": silence_duration_ms,
-                    },
+                    turn_detection=turn_detection,
                 ),
                 tracing_disabled=True,
             ),
