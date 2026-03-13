@@ -3,14 +3,15 @@ from __future__ import annotations
 import uuid
 from enum import IntFlag
 
-from PyQt6.QtCore import Qt, QPoint, QTimer, pyqtSignal
-from PyQt6.QtGui import QBrush, QColor, QCursor, QFont, QPainter, QPainterPath
+from PyQt6.QtCore import Qt, QByteArray, QBuffer, QIODevice, QPoint, QTimer, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor, QCursor, QFont, QImage, QPainter, QPainterPath, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -38,6 +39,77 @@ class _Edge(IntFlag):
     BOTTOM = 8
 
 
+class UserMessageBlock(QFrame):
+    """A user question/message block."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full_text = ""
+        self.setStyleSheet(
+            "UserMessageBlock {"
+            "  background-color: rgba(30, 30, 60, 180);"
+            "  border: 1px solid rgba(100, 100, 150, 0.3);"
+            "  border-radius: 8px;"
+            "}"
+        )
+        self._label = QLabel()
+        self._label.setWordWrap(True)
+        self._label.setFont(QFont(MONOSPACE_FONT, 12, weight=QFont.Weight.Normal))
+        self._label.setStyleSheet(
+            "QLabel {"
+            "  color: #b0b0ff; background: transparent; border: none;"
+            "  padding: 4px;"
+            "}"
+        )
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
+        self._image_label = QLabel()
+        self._image_label.setStyleSheet(
+            "QLabel { background: transparent; border: none; padding: 2px; }"
+        )
+        self._image_label.hide()
+
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.addWidget(self._image_label)
+        layout.addWidget(self._label)
+
+    @property
+    def full_text(self) -> str:
+        return self._full_text
+
+    def set_text(self, text: str) -> None:
+        self._full_text = text
+        self._label.setText(text)
+        self._update_height()
+
+    def set_image(self, image_data: bytes) -> None:
+        pixmap = QPixmap()
+        pixmap.loadFromData(image_data)
+        scaled = pixmap.scaled(
+            200, 150,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._image_label.setPixmap(scaled)
+        self._image_label.show()
+
+    def _update_height(self) -> None:
+        width = self._label.width()
+        if width > 0:
+            height = self._label.heightForWidth(width)
+            if height > 0:
+                self._label.setFixedHeight(height)
+                return
+        self._label.setFixedHeight(self._label.sizeHint().height())
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._update_height()
+
+
 class ResponseBlock(QFrame):
     """A single AI response block."""
 
@@ -45,26 +117,26 @@ class ResponseBlock(QFrame):
 
     _EXPAND_BTN_STYLE_DEFAULT = (
         "QPushButton { color: #888; background: rgba(40, 40, 70, 200);"
-        " border: 1px solid rgba(86, 141, 229, 0.3); border-radius: 11px;"
-        " font-size: 12px; font-weight: bold; }"
+        " border: 1px solid rgba(86, 141, 229, 0.3); border-radius: 9px;"
+        " font-size: 10px; font-weight: bold; }"
         "QPushButton:hover { color: #568de5; border-color: #568de5; }"
     )
     _EXPAND_BTN_STYLE_LOADING = (
         "QPushButton { color: #f0c040; background: rgba(40, 40, 70, 200);"
-        " border: 1px solid rgba(240, 192, 64, 0.5); border-radius: 11px;"
-        " font-size: 12px; font-weight: bold; }"
+        " border: 1px solid rgba(240, 192, 64, 0.5); border-radius: 9px;"
+        " font-size: 10px; font-weight: bold; }"
         "QPushButton:hover { color: #f5d060; border-color: #f5d060; }"
     )
     _EXPAND_BTN_STYLE_READY = (
         "QPushButton { color: #568de5; background: rgba(40, 40, 70, 200);"
-        " border: 1px solid rgba(86, 141, 229, 0.6); border-radius: 11px;"
-        " font-size: 12px; font-weight: bold; }"
+        " border: 1px solid rgba(86, 141, 229, 0.6); border-radius: 9px;"
+        " font-size: 10px; font-weight: bold; }"
         "QPushButton:hover { color: #7ab0ff; border-color: #7ab0ff; }"
     )
     _EXPAND_BTN_STYLE_ERROR = (
         "QPushButton { color: #e74c3c; background: rgba(40, 40, 70, 200);"
-        " border: 1px solid rgba(231, 76, 60, 0.5); border-radius: 11px;"
-        " font-size: 12px; font-weight: bold; }"
+        " border: 1px solid rgba(231, 76, 60, 0.5); border-radius: 9px;"
+        " font-size: 10px; font-weight: bold; }"
         "QPushButton:hover { color: #ff6b5a; border-color: #ff6b5a; }"
     )
 
@@ -100,7 +172,7 @@ class ResponseBlock(QFrame):
 
         self._expand_btn = QPushButton("?")
         self._expand_btn.setParent(self)
-        self._expand_btn.setFixedSize(22, 22)
+        self._expand_btn.setFixedSize(18, 18)
         self._expand_btn.setStyleSheet(self._EXPAND_BTN_STYLE_DEFAULT)
         self._expand_btn.clicked.connect(
             lambda: self.expansion_requested.emit(self._block_id),
@@ -146,20 +218,46 @@ class ResponseBlock(QFrame):
         self._browser.setFixedHeight(doc_height)
 
     def _reposition_expand_btn(self) -> None:
-        self._expand_btn.move(self.width() - 30, 6)
+        self._expand_btn.move(self.width() - 22, self.height() - 22)
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
         self._reposition_expand_btn()
 
 
+class _PastableLineEdit(QLineEdit):
+    """QLineEdit that detects image paste from clipboard."""
+
+    image_pasted = pyqtSignal(bytes)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if (
+            event.key() == Qt.Key.Key_V
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        ):
+            clipboard = QApplication.clipboard()
+            if clipboard is not None:
+                image = clipboard.image()
+                if not image.isNull():
+                    ba = QByteArray()
+                    buf = QBuffer(ba)
+                    buf.open(QIODevice.OpenModeFlag.WriteOnly)
+                    image.save(buf, "PNG")
+                    buf.close()
+                    self.image_pasted.emit(bytes(ba.data()))
+                    return
+        super().keyPressEvent(event)
+
+
 class OverlayWindow(QWidget):
+    clear_requested = pyqtSignal()
     close_requested = pyqtSignal()
     commit_requested = pyqtSignal()
     device_changed = pyqtSignal(int)
     expansion_requested = pyqtSignal(str)
     settings_requested = pyqtSignal()
     skip_requested = pyqtSignal()
+    text_submitted = pyqtSignal(str, object)
     toggle_requested = pyqtSignal()
 
     def __init__(self) -> None:
@@ -205,6 +303,7 @@ class OverlayWindow(QWidget):
 
         layout.addLayout(self._build_header())
         layout.addWidget(self._build_scroll_area())
+        layout.addWidget(self._build_text_input())
         layout.addLayout(self._build_controls())
 
     def _build_header(self) -> QHBoxLayout:
@@ -277,6 +376,97 @@ class OverlayWindow(QWidget):
 
         return self._scroll_area
 
+    def _build_text_input(self) -> QWidget:
+        self._attached_image: bytes | None = None
+
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(4)
+
+        # Image preview row (hidden by default)
+        self._image_preview_row = QWidget()
+        self._image_preview_row.setStyleSheet("background: transparent;")
+        preview_layout = QHBoxLayout(self._image_preview_row)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(6)
+
+        self._image_thumbnail = QLabel()
+        self._image_thumbnail.setFixedSize(60, 60)
+        self._image_thumbnail.setStyleSheet(
+            "QLabel {"
+            "  background: rgba(40, 40, 70, 200);"
+            "  border: 1px solid rgba(86, 141, 229, 0.3);"
+            "  border-radius: 4px;"
+            "}"
+        )
+
+        clear_img_btn = QPushButton("\u00d7")
+        clear_img_btn.setFixedSize(18, 18)
+        clear_img_btn.setStyleSheet(
+            "QPushButton { color: #888; background: rgba(40, 40, 70, 200);"
+            " border: 1px solid rgba(100, 100, 150, 0.3); border-radius: 9px;"
+            " font-size: 12px; font-weight: bold; }"
+            "QPushButton:hover { color: #e74c3c; border-color: #e74c3c; }"
+        )
+        clear_img_btn.clicked.connect(self._clear_attached_image)
+
+        preview_layout.addWidget(self._image_thumbnail)
+        preview_layout.addWidget(clear_img_btn, alignment=Qt.AlignmentFlag.AlignTop)
+        preview_layout.addStretch()
+        self._image_preview_row.hide()
+        container_layout.addWidget(self._image_preview_row)
+
+        # Text input
+        self._text_input = _PastableLineEdit()
+        self._text_input.setPlaceholderText("Type a question...")
+        self._text_input.setEnabled(False)
+        self._text_input.setStyleSheet(
+            "QLineEdit {"
+            "  background: rgba(40, 40, 70, 200); color: #e6e6e6;"
+            "  border: 1px solid rgba(86, 141, 229, 0.3);"
+            "  border-radius: 6px; padding: 6px 10px;"
+            "  font-size: 12px;"
+            "}"
+            "QLineEdit:focus {"
+            "  border: 1px solid rgba(86, 141, 229, 0.7);"
+            "}"
+            "QLineEdit:disabled {"
+            "  color: #666; background: rgba(30, 30, 50, 200);"
+            "}"
+        )
+        self._text_input.returnPressed.connect(self._on_text_submit)
+        self._text_input.image_pasted.connect(self._on_image_pasted)
+        container_layout.addWidget(self._text_input)
+
+        return container
+
+    def _on_image_pasted(self, image_data: bytes) -> None:
+        self._attached_image = image_data
+        pixmap = QPixmap()
+        pixmap.loadFromData(image_data)
+        scaled = pixmap.scaled(
+            56, 56,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        self._image_thumbnail.setPixmap(scaled)
+        self._image_preview_row.show()
+
+    def _clear_attached_image(self) -> None:
+        self._attached_image = None
+        self._image_thumbnail.clear()
+        self._image_preview_row.hide()
+
+    def _on_text_submit(self) -> None:
+        text = self._text_input.text().strip()
+        image_data = self._attached_image
+        if text or image_data is not None:
+            self._text_input.clear()
+            self._clear_attached_image()
+            self.text_submitted.emit(text, image_data)
+
     def _build_controls(self) -> QHBoxLayout:
         controls = QHBoxLayout()
 
@@ -316,6 +506,18 @@ class OverlayWindow(QWidget):
         )
         self._toggle_btn.clicked.connect(self.toggle_requested.emit)
 
+        self._clear_btn = QPushButton("Clear")
+        self._clear_btn.setFixedWidth(60)
+        self._clear_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: rgba(149, 165, 166, 0.8); color: white;"
+            "  border: none; border-radius: 6px; padding: 6px;"
+            "  font-weight: bold;"
+            "}"
+            "QPushButton:hover { background: rgba(149, 165, 166, 1.0); }"
+        )
+        self._clear_btn.clicked.connect(self.clear_requested.emit)
+
         self._send_btn = QPushButton("Send")
         self._send_btn.setFixedWidth(60)
         self._send_btn.setVisible(False)
@@ -344,6 +546,7 @@ class OverlayWindow(QWidget):
 
         controls.addWidget(self._device_combo)
         controls.addStretch()
+        controls.addWidget(self._clear_btn)
         controls.addWidget(self._send_btn)
         controls.addWidget(self._skip_btn)
         controls.addWidget(self._toggle_btn)
@@ -351,12 +554,31 @@ class OverlayWindow(QWidget):
 
     # ── public API ───────────────────────────────────────
 
+    def clear_dialogue(self) -> None:
+        """Clear all messages from the overlay."""
+        while self._blocks_layout.count() > 1:
+            item = self._blocks_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._current_block = None
+        self._blocks.clear()
+
     def set_devices(self, devices: list[tuple[int, str]]) -> None:
         self._device_combo.blockSignals(True)
         self._device_combo.clear()
         for index, name in devices:
             self._device_combo.addItem(name, index)
         self._device_combo.blockSignals(False)
+
+    def show_user_message(self, text: str, image_data: bytes | None = None) -> None:
+        """Display a user question/message block."""
+        block = UserMessageBlock()
+        if image_data is not None:
+            block.set_image(image_data)
+        if text:
+            block.set_text(text)
+        insert_index = self._blocks_layout.count() - 1
+        self._blocks_layout.insertWidget(insert_index, block)
 
     def begin_response(self) -> None:
         block = ResponseBlock()
@@ -412,9 +634,11 @@ class OverlayWindow(QWidget):
         self._skip_btn.setVisible(active)
         if active:
             self._send_btn.setVisible(False)
+            self._text_input.setEnabled(False)
         else:
             if self._toggle_btn.text() == "Stop":
                 self._send_btn.setVisible(True)
+                self._text_input.setEnabled(True)
             QTimer.singleShot(0, self._render_current_block)
 
     def _render_current_block(self) -> None:
@@ -424,6 +648,7 @@ class OverlayWindow(QWidget):
 
     def set_recording(self, active: bool) -> None:
         self._send_btn.setVisible(active)
+        self._text_input.setEnabled(active)
         self._toggle_btn.setText("Stop" if active else "Start")
         btn_color = "rgba(231, 76, 60, 0.8)" if active else "rgba(86, 141, 229, 0.8)"
         hover_color = "rgba(231, 76, 60, 1.0)" if active else "rgba(86, 141, 229, 1.0)"

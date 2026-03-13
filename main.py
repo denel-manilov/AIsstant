@@ -20,6 +20,10 @@ from aisstant.config import (
     load_agent_model,
     load_expansion_settings,
     load_few_shot_examples,
+    load_silence_duration_ms,
+    load_vad_eagerness,
+    load_vad_threshold,
+    load_vad_type,
 )
 from aisstant.latency_tracker import LatencyTracker
 from aisstant.pipeline import AgentPipeline, ExpansionResult, ExpansionService
@@ -49,15 +53,18 @@ class App:
         self._using_system_audio = False
         self._pipeline: AgentPipeline | None = None
         self._pending_transcription: str | None = None
+        self._pending_image_data: bytes | None = None
 
         self._apply_expansion_settings()
 
         self._populate_devices()
         self._window.toggle_requested.connect(self._on_toggle)
+        self._window.clear_requested.connect(self._on_clear_requested)
         self._window.commit_requested.connect(self._on_commit)
         self._window.device_changed.connect(self._on_device_changed)
         self._window.settings_requested.connect(self._on_settings)
         self._window.skip_requested.connect(self._on_skip)
+        self._window.text_submitted.connect(self._on_text_submitted)
         self._window.close_requested.connect(self._on_close)
         self._window.expansion_requested.connect(self._on_expansion_requested)
         self._settings_window.saved.connect(self._on_settings_saved)
@@ -86,6 +93,7 @@ class App:
 
     def _on_transcription(self, text: str) -> None:
         self._pending_transcription = text
+        self._window.show_user_message(text)
 
     def _on_response_start(self) -> None:
         self._window.begin_response()
@@ -98,12 +106,15 @@ class App:
             self._window.mark_current_block_complete()
             history = self._pipeline.get_history() if self._pipeline else []
             self._expansion_service.request_expansion(
-                block_id, transcription, history=history,
+                block_id, transcription,
+                history=history,
+                image_data=self._pending_image_data,
             )
             self._expansion_service.add_listener(
                 block_id, self._make_expansion_listener(block_id),
             )
             self._pending_transcription = None
+            self._pending_image_data = None
 
     def _on_turn_ended(self) -> None:
         self._window.set_responding(False)
@@ -139,6 +150,20 @@ class App:
             self._loop.create_task(self._stop())
         else:
             self._loop.create_task(self._start())
+
+    def _on_clear_requested(self) -> None:
+        self._window.clear_dialogue()
+        if self._pipeline is not None:
+            self._pipeline.clear_context()
+
+    def _on_text_submitted(self, text: str, image_data: object) -> None:
+        if not self._recording or self._pipeline is None:
+            return
+        display_text = text if text else "[Image]"
+        self._window.show_user_message(display_text, image_data)
+        self._pending_transcription = display_text
+        self._pending_image_data = image_data
+        self._loop.create_task(self._pipeline.send_text(text, image_data))
 
     def _on_commit(self) -> None:
         if self._recording and self._pipeline is not None:
@@ -198,6 +223,10 @@ class App:
             instructions=build_agent_instructions(),
             initial_history=build_initial_history(load_few_shot_examples()),
             model=load_agent_model(),
+            vad_type=load_vad_type(),
+            vad_threshold=load_vad_threshold(),
+            silence_duration_ms=load_silence_duration_ms(),
+            vad_eagerness=load_vad_eagerness(),
         )
 
         if self._using_system_audio:
@@ -217,7 +246,8 @@ class App:
         self._window.set_recording(False)
         self._window.set_responding(False)
         self._audio.stop()
-        self._system_audio.stop()
+        if self._system_audio is not None:
+            self._system_audio.stop()
         if self._pipeline is not None:
             await self._pipeline.stop()
             self._pipeline = None

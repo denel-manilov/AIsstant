@@ -39,6 +39,13 @@ DEFAULT_EXPANSION_PROMPT = (
 )
 DEFAULT_EXPANSION_USER_PROMPT = "Expand on this answer in detail:\n\n{text}"
 
+DEFAULT_VAD_TYPE = "server_vad"
+AVAILABLE_VAD_TYPES = ["server_vad", "semantic_vad"]
+DEFAULT_VAD_THRESHOLD = 0.5
+DEFAULT_SILENCE_DURATION_MS = 400
+DEFAULT_VAD_EAGERNESS = "auto"
+AVAILABLE_VAD_EAGERNESS = ["auto", "low", "medium", "high"]
+
 
 def load_agent_model() -> str:
     return _load_settings().get("agent_model", DEFAULT_AGENT_MODEL)
@@ -126,6 +133,46 @@ def build_initial_history(examples: list[dict]) -> list[dict]:
         history.append({"role": "user", "content": ex["question"]})
         history.append({"role": "assistant", "content": ex["answer"]})
     return history
+
+
+def load_vad_type() -> str:
+    return _load_settings().get("vad_type", DEFAULT_VAD_TYPE)
+
+
+def save_vad_type(vad_type: str) -> None:
+    settings = _load_settings()
+    settings["vad_type"] = vad_type
+    _save_settings(settings)
+
+
+def load_vad_threshold() -> float:
+    return _load_settings().get("vad_threshold", DEFAULT_VAD_THRESHOLD)
+
+
+def save_vad_threshold(threshold: float) -> None:
+    settings = _load_settings()
+    settings["vad_threshold"] = threshold
+    _save_settings(settings)
+
+
+def load_silence_duration_ms() -> int:
+    return _load_settings().get("silence_duration_ms", DEFAULT_SILENCE_DURATION_MS)
+
+
+def save_silence_duration_ms(ms: int) -> None:
+    settings = _load_settings()
+    settings["silence_duration_ms"] = ms
+    _save_settings(settings)
+
+
+def load_vad_eagerness() -> str:
+    return _load_settings().get("vad_eagerness", DEFAULT_VAD_EAGERNESS)
+
+
+def save_vad_eagerness(eagerness: str) -> None:
+    settings = _load_settings()
+    settings["vad_eagerness"] = eagerness
+    _save_settings(settings)
 
 
 def load_api_key() -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from dataclasses import dataclass
 from enum import Enum
@@ -42,11 +43,12 @@ class ExpansionService:
     def request_expansion(
         self, block_id: str, response_text: str,
         history: list[dict] | None = None,
+        image_data: bytes | None = None,
     ) -> None:
         """Start a background expansion generation for a response block."""
         self._results[block_id] = ExpansionResult(status=ExpansionStatus.PENDING)
         task = asyncio.create_task(
-            self._run_expansion(block_id, response_text, history or []),
+            self._run_expansion(block_id, response_text, history or [], image_data),
         )
         self._tasks[block_id] = task
 
@@ -74,19 +76,28 @@ class ExpansionService:
 
     async def _run_expansion(
         self, block_id: str, response_text: str, history: list[dict],
+        image_data: bytes | None = None,
     ) -> None:
         self._results[block_id] = ExpansionResult(status=ExpansionStatus.LOADING)
         self._notify(block_id)
 
         try:
             client = AsyncOpenAI(api_key=get_api_key())
+
+            user_prompt_text = self._user_prompt.format(text=response_text)
+            if image_data is not None:
+                b64 = base64.b64encode(image_data).decode()
+                user_content = [
+                    {"type": "text", "text": user_prompt_text},
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                ]
+            else:
+                user_content = user_prompt_text
+
             messages: list[dict] = [
                 {"role": "system", "content": self._system_prompt},
                 *history,
-                {
-                    "role": "user",
-                    "content": self._user_prompt.format(text=response_text),
-                },
+                {"role": "user", "content": user_content},
             ]
             stream = await client.chat.completions.create(
                 model=self._model,

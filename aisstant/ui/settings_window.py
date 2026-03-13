@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSlider,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -17,16 +18,26 @@ from PyQt6.QtWidgets import (
 
 from aisstant.config import (
     AVAILABLE_AGENT_MODELS,
+    AVAILABLE_VAD_EAGERNESS,
+    AVAILABLE_VAD_TYPES,
     load_agent_model,
     load_api_key,
     load_custom_prompt,
     load_expansion_settings,
     load_few_shot_examples,
+    load_silence_duration_ms,
+    load_vad_eagerness,
+    load_vad_threshold,
+    load_vad_type,
     save_agent_model,
     save_api_key,
     save_custom_prompt,
     save_expansion_settings,
     save_few_shot_examples,
+    save_silence_duration_ms,
+    save_vad_eagerness,
+    save_vad_threshold,
+    save_vad_type,
 )
 from aisstant.platform.fonts import MONOSPACE_FONT
 from aisstant.ui.base_window import StealthWindow
@@ -146,6 +157,13 @@ class SettingsWindow(StealthWindow):
         layout.addWidget(self._make_group_header("System"))
         layout.addLayout(self._build_api_key_row())
         layout.addLayout(self._build_model_selector())
+        layout.addLayout(self._build_vad_type_row())
+        layout.addLayout(self._build_vad_threshold_row())
+        layout.addLayout(self._build_silence_duration_row())
+        layout.addLayout(self._build_vad_eagerness_row())
+
+        self._vad_type.currentTextChanged.connect(self._on_vad_type_changed)
+        self._on_vad_type_changed(self._vad_type.currentText())
 
         prompt_label = QLabel("System Prompt:")
         prompt_label.setStyleSheet(_SECTION_LABEL_STYLE)
@@ -237,6 +255,166 @@ class SettingsWindow(StealthWindow):
         row.addWidget(label)
         row.addWidget(self._api_key_input)
         return row
+
+    def _build_vad_type_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+
+        label = QLabel("VAD Type:")
+        label.setStyleSheet(_SECTION_LABEL_STYLE)
+
+        self._vad_type = QComboBox()
+        self._vad_type.addItems(AVAILABLE_VAD_TYPES)
+        self._vad_type.setStyleSheet(
+            "QComboBox {"
+            "  background-color: rgba(15, 15, 30, 180);"
+            "  color: #e6e6e6;"
+            "  border: 1px solid rgba(86, 141, 229, 0.3);"
+            "  border-radius: 6px;"
+            "  padding: 4px 8px;"
+            "}"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox QAbstractItemView {"
+            "  background-color: rgba(26, 26, 46, 240);"
+            "  color: #e6e6e6;"
+            "  selection-background-color: rgba(86, 141, 229, 0.5);"
+            "}"
+        )
+        self._vad_type.setMinimumWidth(160)
+
+        row.addWidget(label)
+        row.addWidget(self._vad_type)
+        row.addStretch()
+        return row
+
+    def _build_vad_threshold_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+
+        label = QLabel("VAD Threshold:")
+        label.setStyleSheet(_SECTION_LABEL_STYLE)
+
+        self._vad_slider = QSlider(Qt.Orientation.Horizontal)
+        self._vad_slider.setRange(1, 99)
+        self._vad_slider.setSingleStep(5)
+        self._vad_slider.setPageStep(5)
+        self._vad_slider.setStyleSheet(
+            "QSlider::groove:horizontal {"
+            "  border: 1px solid rgba(86, 141, 229, 0.3);"
+            "  height: 6px;"
+            "  background: rgba(15, 15, 30, 180);"
+            "  border-radius: 3px;"
+            "}"
+            "QSlider::handle:horizontal {"
+            "  background: #568de5;"
+            "  width: 14px;"
+            "  margin: -4px 0;"
+            "  border-radius: 7px;"
+            "}"
+            "QSlider::handle:horizontal:hover {"
+            "  background: #7ab0ff;"
+            "}"
+        )
+        self._vad_slider.setMinimumWidth(150)
+
+        self._vad_label = QLabel("0.50")
+        self._vad_label.setStyleSheet("color: #e6e6e6; font-size: 12px; font-family: monospace;")
+        self._vad_label.setFixedWidth(35)
+
+        self._vad_slider.valueChanged.connect(
+            lambda v: self._vad_label.setText(f"{v / 100.0:.2f}")
+        )
+
+        row.addWidget(label)
+        row.addWidget(self._vad_slider)
+        row.addWidget(self._vad_label)
+        row.addStretch()
+        return row
+
+    def _build_silence_duration_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+
+        label = QLabel("Silence Duration (ms):")
+        label.setStyleSheet(_SECTION_LABEL_STYLE)
+
+        self._silence_slider = QSlider(Qt.Orientation.Horizontal)
+        self._silence_slider.setRange(100, 2000)
+        self._silence_slider.setSingleStep(100)
+        self._silence_slider.setPageStep(500)
+        self._silence_slider.setStyleSheet(
+            "QSlider::groove:horizontal {"
+            "  border: 1px solid rgba(86, 141, 229, 0.3);"
+            "  height: 6px;"
+            "  background: rgba(15, 15, 30, 180);"
+            "  border-radius: 3px;"
+            "}"
+            "QSlider::handle:horizontal {"
+            "  background: #568de5;"
+            "  width: 14px;"
+            "  margin: -4px 0;"
+            "  border-radius: 7px;"
+            "}"
+            "QSlider::handle:horizontal:hover {"
+            "  background: #7ab0ff;"
+            "}"
+        )
+        self._silence_slider.setMinimumWidth(150)
+
+        self._silence_label = QLabel("400")
+        self._silence_label.setStyleSheet("color: #e6e6e6; font-size: 12px; font-family: monospace;")
+        self._silence_label.setFixedWidth(35)
+
+        self._silence_slider.valueChanged.connect(
+            lambda v: self._silence_label.setText(str(v))
+        )
+
+        row.addWidget(label)
+        row.addWidget(self._silence_slider)
+        row.addWidget(self._silence_label)
+        row.addStretch()
+        return row
+
+    def _build_vad_eagerness_row(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+
+        self._eagerness_label = QLabel("VAD Eagerness:")
+        self._eagerness_label.setStyleSheet(_SECTION_LABEL_STYLE)
+
+        self._eagerness_combo = QComboBox()
+        self._eagerness_combo.addItems(AVAILABLE_VAD_EAGERNESS)
+        self._eagerness_combo.setStyleSheet(
+            "QComboBox {"
+            "  background-color: rgba(15, 15, 30, 180);"
+            "  color: #e6e6e6;"
+            "  border: 1px solid rgba(86, 141, 229, 0.3);"
+            "  border-radius: 6px;"
+            "  padding: 4px 8px;"
+            "}"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox QAbstractItemView {"
+            "  background-color: rgba(26, 26, 46, 240);"
+            "  color: #e6e6e6;"
+            "  selection-background-color: rgba(86, 141, 229, 0.5);"
+            "}"
+        )
+        self._eagerness_combo.setMinimumWidth(160)
+
+        row.addWidget(self._eagerness_label)
+        row.addWidget(self._eagerness_combo)
+        row.addStretch()
+        return row
+
+    def _on_vad_type_changed(self, vad_type: str) -> None:
+        is_server = vad_type == "server_vad"
+        self._vad_slider.setVisible(is_server)
+        self._vad_label.setVisible(is_server)
+        self._silence_slider.setVisible(is_server)
+        self._silence_label.setVisible(is_server)
+        self._eagerness_label.setVisible(not is_server)
+        self._eagerness_combo.setVisible(not is_server)
+        # Find and toggle the row labels too
+        for label in self.findChildren(QLabel):
+            text = label.text()
+            if text == "VAD Threshold:" or text == "Silence Duration (ms):":
+                label.setVisible(is_server)
 
     def _build_model_selector(self) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -449,6 +627,10 @@ class SettingsWindow(StealthWindow):
     def _on_save(self) -> None:
         save_api_key(self._api_key_input.text().strip())
         save_agent_model(self._agent_model.currentText().strip())
+        save_vad_type(self._vad_type.currentText())
+        save_vad_threshold(self._vad_slider.value() / 100.0)
+        save_silence_duration_ms(self._silence_slider.value())
+        save_vad_eagerness(self._eagerness_combo.currentText())
         save_custom_prompt(self._editor.toPlainText())
         save_few_shot_examples(self._collect_examples())
         save_expansion_settings(
@@ -466,6 +648,19 @@ class SettingsWindow(StealthWindow):
         super().showEvent(event)
         self._api_key_input.setText(load_api_key())
         self._agent_model.setCurrentText(load_agent_model())
+        self._vad_type.setCurrentText(load_vad_type())
+
+        vad_val = load_vad_threshold()
+        self._vad_slider.setValue(int(vad_val * 100))
+        self._vad_label.setText(f"{vad_val:.2f}")
+
+        silence_ms = load_silence_duration_ms()
+        self._silence_slider.setValue(silence_ms)
+        self._silence_label.setText(str(silence_ms))
+
+        self._eagerness_combo.setCurrentText(load_vad_eagerness())
+        self._on_vad_type_changed(self._vad_type.currentText())
+
         self._editor.setPlainText(load_custom_prompt())
 
         exp = load_expansion_settings()

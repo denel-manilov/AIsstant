@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from collections.abc import AsyncIterator
 from typing import Callable
@@ -48,6 +49,10 @@ class AgentPipeline:
         instructions: str = DEFAULT_INSTRUCTIONS,
         initial_history: list[dict] | None = None,
         model: str = "gpt-4.1-nano",
+        vad_type: str = "server_vad",
+        vad_threshold: float = 0.5,
+        silence_duration_ms: int = 400,
+        vad_eagerness: str = "auto",
     ) -> None:
         self._audio_queue = audio_queue
         self._on_text_delta = on_text_delta
@@ -65,16 +70,25 @@ class AgentPipeline:
             initial_history,
             on_transcription=on_transcription,
         )
+
+        if vad_type == "semantic_vad":
+            turn_detection = {
+                "type": "semantic_vad",
+                "eagerness": vad_eagerness,
+            }
+        else:
+            turn_detection = {
+                "type": "server_vad",
+                "threshold": vad_threshold,
+                "silence_duration_ms": silence_duration_ms,
+            }
+
         self._pipeline = VoicePipeline(
             workflow=self._workflow,
             tts_model=_NoOpTTS(),
             config=VoicePipelineConfig(
                 stt_settings=STTModelSettings(
-                    turn_detection={
-                        "type": "server_vad",
-                        "threshold": 0.5,
-                        "silence_duration_ms": 400,
-                    },
+                    turn_detection=turn_detection,
                 ),
                 tracing_disabled=True,
             ),
@@ -91,6 +105,10 @@ class AgentPipeline:
             if item.get("role") in ("user", "assistant")
             and isinstance(item.get("content"), str)
         ]
+
+    def clear_context(self) -> None:
+        """Reset the conversation context."""
+        self._workflow.clear_context()
 
     async def start(self) -> None:
         self._on_status("Connecting...")
@@ -126,6 +144,29 @@ class AgentPipeline:
         self._tasks.clear()
         self._on_status("Disconnected")
         log.info("Pipeline stopped")
+
+    async def send_text(self, text: str, image_data: bytes | None = None) -> None:
+        """Send a text message directly, bypassing STT."""
+        self._on_status("Thinking...")
+        self._workflow.skip_next_transcription_callback()
+
+        if image_data is not None:
+            b64 = base64.b64encode(image_data).decode()
+            content = [
+                {"type": "input_text", "text": text or "What's in this image?"},
+                {"type": "input_image", "image_url": f"data:image/png;base64,{b64}"},
+            ]
+            self._workflow.set_next_content(content)
+
+        try:
+            async for _chunk in self._workflow.run(text or "Describe this image"):
+                pass
+        except Exception as exc:
+            log.error("Text send error: %s", exc, exc_info=True)
+            self._on_status(f"Error: {exc}")
+            return
+        self._on_turn_ended()
+        self._on_status("Listening...")
 
     async def commit(self) -> None:
         if self._audio_input is None:
@@ -202,26 +243,45 @@ class _TextCapturingWorkflow(SingleAgentVoiceWorkflow):
         on_transcription: Callable[[str], None] | None = None,
     ) -> None:
         super().__init__(agent)
-        if initial_history:
-            self._input_history = list(initial_history)
+        self._initial_history = list(initial_history) if initial_history else []
+        self._input_history = list(self._initial_history)
         self._on_text_delta = on_text_delta
         self._on_response_start = on_response_start
         self._on_transcription = on_transcription
         self._tracker = tracker
         self._skip_event = asyncio.Event()
+        self._next_content = None
+        self._skip_next_transcription = False
+
+    def clear_context(self) -> None:
+        log.info("Clearing context")
+        self._input_history = list(self._initial_history)
 
     def request_skip(self) -> None:
         log.info("Skip requested")
         self._skip_event.set()
 
+    def set_next_content(self, content) -> None:
+        """Set multimodal content for the next run() call."""
+        self._next_content = content
+
+    def skip_next_transcription_callback(self) -> None:
+        """Skip the on_transcription callback for the next run() call."""
+        self._skip_next_transcription = True
+
     async def run(self, transcription: str) -> AsyncIterator[str]:
         self._tracker.on_transcription_received(transcription)
         log.info("Workflow run called with transcription: %r", transcription)
-        if self._on_transcription is not None:
+
+        if self._skip_next_transcription:
+            self._skip_next_transcription = False
+        elif self._on_transcription is not None:
             self._on_transcription(transcription)
         self._skip_event.clear()
 
-        self._input_history.append({"role": "user", "content": transcription})
+        content = self._next_content if self._next_content is not None else transcription
+        self._next_content = None
+        self._input_history.append({"role": "user", "content": content})
 
         result = Runner.run_streamed(self._current_agent, self._input_history)
 

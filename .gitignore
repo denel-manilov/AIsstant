@@ -5,3 +5,7 @@ __pycache__
 bin/
 /settings.json
 .DS_Store
+
+.vedcode
+.vedcode.yml
+.mcp.json
