@@ -3,6 +3,9 @@
 __pycache__
 .env
 bin/
+build/
+dist/
+*.zip
 /settings.json
 .DS_Store
 

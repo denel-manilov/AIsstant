@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 
 log = logging.getLogger("config")
@@ -10,8 +11,13 @@ CHANNELS = 1
 CHUNK_DURATION_MS = 60
 CHUNK_SAMPLES = int(SAMPLE_RATE * CHUNK_DURATION_MS / 1000)
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SETTINGS_FILE = PROJECT_ROOT / "settings.json"
+IS_FROZEN = getattr(sys, "frozen", False)
+
+# Base path for bundled resources (icons, bin/).
+# In frozen mode PyInstaller extracts data into sys._MEIPASS.
+BUNDLE_ROOT: Path = Path(getattr(sys, "_MEIPASS", "")) if IS_FROZEN else Path(__file__).resolve().parent.parent
+
+SETTINGS_FILE = Path.home() / ".aisstant.json"
 
 DEFAULT_INSTRUCTIONS = (
     "You are a helpful assistant. "

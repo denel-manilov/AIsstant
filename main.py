@@ -9,11 +9,13 @@ import logging
 import signal
 import sys
 
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 from qasync import QEventLoop
 
 from aisstant.audio import AudioCapture, list_input_devices
 from aisstant.config import (
+    BUNDLE_ROOT,
     build_agent_instructions,
     build_initial_history,
     get_api_key,
@@ -29,6 +31,7 @@ from aisstant.latency_tracker import LatencyTracker
 from aisstant.pipeline import AgentPipeline, ExpansionResult, ExpansionService
 from aisstant.platform import (
     IS_MACOS,
+    IS_WINDOWS,
     SYSTEM_AUDIO_DEVICE_INDEX,
     stealth,
     system_audio_available,
@@ -279,6 +282,16 @@ def main() -> None:
         ensure_system_audio_binary()
 
     qt_app = QApplication(sys.argv)
+
+    if IS_MACOS:
+        icon_path = BUNDLE_ROOT / "icons" / "macos" / "AppIcon.icns"
+    elif IS_WINDOWS:
+        icon_path = BUNDLE_ROOT / "icons" / "web" / "favicon.ico"
+    else:
+        icon_path = BUNDLE_ROOT / "icons" / "web" / "icon-512.png"
+    if icon_path.is_file():
+        qt_app.setWindowIcon(QIcon(str(icon_path)))
+
     stealth.hide_from_dock()
     loop = QEventLoop(qt_app)
     asyncio.set_event_loop(loop)

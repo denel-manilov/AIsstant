@@ -7,14 +7,13 @@ import logging
 import platform
 import stat
 import urllib.request
-from pathlib import Path
 
+from aisstant.config import BUNDLE_ROOT
 from aisstant.platform.base import StealthProvider
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SYSTEM_AUDIO_BINARY = _PROJECT_ROOT / "bin" / "SystemAudioDump"
+SYSTEM_AUDIO_BINARY = BUNDLE_ROOT / "bin" / "SystemAudioDump"
 
 _SYSTEM_AUDIO_RELEASE_URL = (
     "https://github.com/sohzm/systemAudioDump/releases/download/v1"
